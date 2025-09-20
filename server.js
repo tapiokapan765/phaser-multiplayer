@@ -4,21 +4,22 @@ const wss = new WebSocket.Server({ port: process.env.PORT || 3000 });
 let clients = [];
 
 wss.on('connection', ws => {
+  ws.id = Date.now() + Math.random();
   clients.push(ws);
-  console.log('Client connected');
+  console.log('Client connected:', ws.id);
 
   ws.on('message', message => {
-    // 受信したメッセージを全員に送信
+    // 全員に broadcast
     clients.forEach(client => {
       if (client.readyState === WebSocket.OPEN) {
-        client.send(message);
+        client.send(JSON.stringify({ id: ws.id, data: message.toString() }));
       }
     });
   });
 
   ws.on('close', () => {
     clients = clients.filter(c => c !== ws);
-    console.log('Client disconnected');
+    console.log('Client disconnected:', ws.id);
   });
 });
 
