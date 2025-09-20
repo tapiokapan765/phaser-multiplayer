@@ -22,7 +22,8 @@ let others = {};
 const COOLDOWN = 500;
 let scene;
 
-const socket = new WebSocket("wss://phaser-multiplayer-p8jn.onrender.com"); // ← Render の URL に置き換え
+// location.origin で現在のドメインを取得 → ws/wss 自動選択
+const socket = new WebSocket(`${location.origin.replace(/^http/, 'ws')}`);
 let socketId = null;
 
 socket.addEventListener('open', () => {
@@ -35,6 +36,7 @@ socket.addEventListener('message', event => {
   if(msg.id === socketId) return;
 
   const data = JSON.parse(msg.data);
+
   if(!others[msg.id]){
     others[msg.id] = {
       rect: scene.add.rectangle(data.x,data.y,50,50,0x00ff00),
@@ -47,7 +49,6 @@ socket.addEventListener('message', event => {
 
   // 他プレイヤーの弾同期
   if(data.bullets){
-    // 古い弾を消す
     others[msg.id].bullets.forEach(b => b.destroy());
     others[msg.id].bullets = [];
     data.bullets.forEach(bdata => {
@@ -59,7 +60,7 @@ socket.addEventListener('message', event => {
   }
 });
 
-function preload() {}
+function preload(){}
 
 function create() {
   scene = this;
@@ -80,22 +81,19 @@ function create() {
   keys = this.input.keyboard.addKeys({w:'W', a:'A', s:'S', d:'D'});
 }
 
-function update(time) {
-  // 移動
+function update(time){
   player.body.setVelocity(0);
   if(keys.a.isDown) player.body.setVelocityX(-200);
   if(keys.d.isDown) player.body.setVelocityX(200);
   if(keys.w.isDown) player.body.setVelocityY(-200);
   if(keys.s.isDown) player.body.setVelocityY(200);
 
-  // マウス方向
   const pointer = this.input.activePointer;
   const angle = Phaser.Math.Angle.Between(player.x, player.y, pointer.x, pointer.y);
   aim.x = player.x;
   aim.y = player.y;
   aim.rotation = angle + Math.PI/2;
 
-  // 弾発射
   if(pointer.isDown && time>lastFired){
     lastFired = time + COOLDOWN;
     const b = bullets.create(player.x, player.y, null);
@@ -103,16 +101,14 @@ function update(time) {
     b.body.setVelocity(Math.cos(angle)*400, Math.sin(angle)*400);
   }
 
-  // 弾削除
-  bullets.getChildren().forEach(b => {
+  bullets.getChildren().forEach(b=>{
     if(b.x<0||b.x>800||b.y<0||b.y>600) b.destroy();
   });
 
   // サーバーに送信
   if(socket.readyState===WebSocket.OPEN){
-    // 自分の位置＋弾情報を送信
     const bulletsData = bullets.getChildren().map(b=>({x:b.x, y:b.y, vx:b.body.velocity.x, vy:b.body.velocity.y}));
-    socket.send(JSON.stringify({x:player.x, y:player.y, bullets: bulletsData}));
+    socket.send(JSON.stringify({x:player.x, y:player.y, bullets:bulletsData}));
   }
 }
 </script>
