@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>オンラインジャンプゲーム 上位5位</title>
+<script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.min.js"></script>
+</head>
+<body style="margin:0;overflow:hidden;">
+<script>
+let playerId;
+let players = {};
+let obstacles = [];
+let ranking = [];
+let totalRanking = [];
+let playerName = '';
+
+playerName = prompt("名前を入力してください", "Player");
+
+const socket = new WebSocket(`${location.protocol==='https:'?'wss':'ws'}://${location.host}`);
+socket.addEventListener('message', (event)=>{
+  const data = JSON.parse(event.data);
+  if(data.type==='init'){
+      playerId = data.id;
+      socket.send(JSON.stringify({type:'setName', name: playerName}));
+  }
+  if(data.type==='state'){
+      players = data.players;
+      obstacles = data.obstacles;
+      ranking = data.ranking;
+      totalRanking = data.totalRanking; // 永続ランキング
+  }
+});
+
+const config = {
+  type: Phaser.AUTO,
+  width: window.innerWidth,
+  height: window.innerHeight,
+  physics: { default:'arcade', arcade:{ gravity:{y:0} } },
+  scene:{
+    preload:function(){},
+    create:function(){
+      this.graphics = this.add.graphics();
+
+      this.gameOverText = this.add.text(window.innerWidth/2-80, window.innerHeight/2-20,'',{font:'32px Arial',fill:'#ff0000'});
+      this.restartText = this.add.text(window.innerWidth/2-100, window.innerHeight/2+20,'',{font:'20px Arial',fill:'#ffffff'});
+
+      // ランキング表示
+      this.rankText = this.add.text(window.innerWidth-200,10,'',{font:'16px Arial',fill:'#ffff00'});
+      this.totalRankText = this.add.text(window.innerWidth-200,150,'',{font:'16px Arial',fill:'#ffdd00'});
+
+      this.input.on('pointerdown', ()=>socket.send(JSON.stringify({type:'jump'})));
+      let startY=0;
+      this.input.on('pointerdown', ptr=>startY=ptr.y);
+      this.input.on('pointerup', ptr=>{
+        if(startY - ptr.y >50) socket.send(JSON.stringify({type:'jump'}));
+      });
+      this.input.keyboard.on('keydown-SPACE', ()=>socket.send(JSON.stringify({type:'jump'})));
+    },
+    update:function(){
+      this.graphics.clear();
+
+      this.graphics.fillStyle(0x0000ff,1);
+      obstacles.forEach(ob=> this.graphics.fillRect(ob.x, ob.y, ob.width, ob.height));
+
+      for(const id in players){
+        const p = players[id];
+        let color = 0xff0000; // 他プレイヤー赤
+        if(id==playerId) color = p.invincible ? 0xffff00 : 0x00ff00; // 無敵は黄、自分通常緑
+        this.graphics.fillStyle(color,1);
+        this.graphics.fillRect(p.x,p.y,20,20);
+
+        if(id==playerId){
+            if(p.gameOver){
+                this.gameOverText.setText('GAME OVER');
+                this.restartText.setText('Click/Tap to Restart');
+                this.input.once('pointerdown', ()=>socket.send(JSON.stringify({type:'restart'})));
+                this.input.keyboard.once('keydown-SPACE', ()=>socket.send(JSON.stringify({type:'restart'})));
+            } else {
+                this.gameOverText.setText('');
+                this.restartText.setText('');
+            }
+        }
+      }
+
+      // リアルタイムランキング
+      let rankStr = 'RANK\n';
+      ranking.forEach((p,i)=>{
+        const displayName = players[p.id]?.name || p.id.slice(-4);
+        rankStr += `${i+1}. ${displayName} : ${p.score}\n`;
+      });
+      this.rankText.setText(rankStr);
+
+      // 上位5位永続ランキング
+      let totalStr = 'TOP 5 ALL TIME\n';
+      totalRanking.forEach((p,i)=> totalStr += `${i+1}. ${p.name} : ${p.score}\n`);
+      this.totalRankText.setText(totalStr);
+    }
+  }
+};
+
+new Phaser.Game(config);
+</script>
+</body>
+</html>
